@@ -75,12 +75,10 @@ func (cache *Cache) removeOldest() {
 }
 
 func (cache *Cache) Get(key string) (Value, bool) {
-	for k, elem := range cache.cache {
-		if k == key {
-			cache.elems.MoveToFront(elem)
-			entry := elem.Value.(*Entry)
-			return entry.value, true
-		}
+	if elem, ok := cache.cache[key]; ok {
+		cache.elems.MoveToFront(elem)
+		entry := elem.Value.(*Entry)
+		return entry.value, true
 	}
 	return nil, false
 }

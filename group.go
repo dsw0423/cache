@@ -10,6 +10,7 @@ type Group struct {
 	name   string
 	ca     *cache
 	getter Getter
+	peers  PeerPicker
 }
 
 var (
@@ -35,6 +36,13 @@ func NewGroup(name string, maxBytes uint64, getter Getter) *Group {
 	return g
 }
 
+func (g *Group) RegisterPeers(peers PeerPicker) {
+	if g.peers != nil {
+		panic("RegisterPeers called more than once")
+	}
+	g.peers = peers
+}
+
 func GetGroup(name string) *Group {
 	mu.RLock()
 	defer mu.RUnlock()
@@ -55,7 +63,16 @@ func (g *Group) Get(key string) (ByteView, error) {
 	return g.load(key)
 }
 
-func (g *Group) load(key string) (ByteView, error) {
+func (g *Group) load(key string) (value ByteView, err error) {
+	if g.peers != nil {
+		if peer, ok := g.peers.PickPeer(key); ok {
+			if value, err = g.loadFromPeer(peer, key); err == nil {
+				return value, nil
+			}
+			log.Println("[Cache] Failed load from peer", err)
+		}
+	}
+
 	return g.loadFromLocal(key)
 }
 
@@ -72,4 +89,12 @@ func (g *Group) loadFromLocal(key string) (ByteView, error) {
 
 func (g *Group) populateCache(key string, value ByteView) {
 	g.ca.add(key, value)
+}
+
+func (g *Group) loadFromPeer(peer PeerGetter, key string) (ByteView, error) {
+	if bytes, err := peer.Get(g.name, key); err != nil {
+		return ByteView{}, err
+	} else {
+		return ByteView{bytes}, nil
+	}
 }

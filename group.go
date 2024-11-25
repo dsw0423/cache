@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"log"
 	"sync"
+
+	"github.com/dsw0423/cache/singleflight"
 )
 
 type Group struct {
@@ -11,6 +13,7 @@ type Group struct {
 	ca     *cache
 	getter Getter
 	peers  PeerPicker
+	loader *singleflight.Group
 }
 
 var (
@@ -30,6 +33,7 @@ func NewGroup(name string, maxBytes uint64, getter Getter) *Group {
 		name:   name,
 		ca:     &cache{maxBytes: maxBytes},
 		getter: getter,
+		loader: &singleflight.Group{},
 	}
 	groups[name] = g
 
@@ -64,16 +68,23 @@ func (g *Group) Get(key string) (ByteView, error) {
 }
 
 func (g *Group) load(key string) (value ByteView, err error) {
-	if g.peers != nil {
-		if peer, ok := g.peers.PickPeer(key); ok {
-			if value, err = g.loadFromPeer(peer, key); err == nil {
-				return value, nil
+	bv, err := g.loader.Do(key, func() (any, error) {
+		if g.peers != nil {
+			if peer, ok := g.peers.PickPeer(key); ok {
+				if value, err = g.loadFromPeer(peer, key); err == nil {
+					return value, nil
+				}
+				log.Println("[Cache] Failed load from peer", err)
 			}
-			log.Println("[Cache] Failed load from peer", err)
 		}
-	}
 
-	return g.loadFromLocal(key)
+		return g.loadFromLocal(key)
+	})
+
+	if err == nil {
+		return bv.(ByteView), nil
+	}
+	return
 }
 
 func (g *Group) loadFromLocal(key string) (ByteView, error) {

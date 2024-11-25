@@ -4,9 +4,12 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 
 	"github.com/dsw0423/cache"
+	pb "github.com/dsw0423/cache/pb/cachepb"
+	"google.golang.org/grpc"
 )
 
 var (
@@ -36,6 +39,21 @@ func startCacheServer(addr string, addrs []string, g *cache.Group) {
 	log.Fatal(http.ListenAndServe(addr[7:], peers))
 }
 
+func startCacheServerGrpc(addr string, addrs []string, g *cache.Group) {
+	lis, err := net.Listen("tcp", addr)
+	if err != nil {
+		log.Fatalf("failed to listen: %v", err)
+	}
+
+	peers := cache.NewGrpcPool(addr)
+	peers.SetPeers(addrs...)
+	g.RegisterPeers(peers)
+	log.Println("gRPC cache server is running at", addr)
+	grpcServer := grpc.NewServer()
+	pb.RegisterCacheServer(grpcServer, peers)
+	log.Fatal(grpcServer.Serve(lis))
+}
+
 func startApiServer(addr string, g *cache.Group) {
 	http.Handle("/api", http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {
@@ -57,8 +75,10 @@ func startApiServer(addr string, g *cache.Group) {
 func main() {
 	var port int
 	var isApiServer bool
+	var grpc bool
 	flag.IntVar(&port, "port", 8001, "cache server port")
 	flag.BoolVar(&isApiServer, "api", false, "is api server?")
+	flag.BoolVar(&grpc, "grpc", true, "enable grpc communication?")
 	flag.Parse()
 
 	apiAddr := `http://localhost:9999`
@@ -68,14 +88,28 @@ func main() {
 		8003: `http://localhost:8003`,
 	}
 
-	addrs := make([]string, 0)
-	for _, addr := range addrMap {
-		addrs = append(addrs, addr)
+	addrMapGrpc := map[int]string{
+		8001: `localhost:8001`,
+		8002: `localhost:8002`,
+		8003: `localhost:8003`,
 	}
 
 	g := createGroup()
 	if isApiServer {
 		go startApiServer(apiAddr, g)
 	}
-	startCacheServer(addrMap[port], addrs, g)
+
+	if grpc {
+		addrs := make([]string, 0)
+		for _, addr := range addrMapGrpc {
+			addrs = append(addrs, addr)
+		}
+		startCacheServerGrpc(addrMapGrpc[port], addrs, g)
+	} else {
+		addrs := make([]string, 0)
+		for _, addr := range addrMap {
+			addrs = append(addrs, addr)
+		}
+		startCacheServer(addrMap[port], addrs, g)
+	}
 }

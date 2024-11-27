@@ -8,8 +8,7 @@ import (
 
 	"github.com/dsw0423/cache/consistenthash"
 	pb "github.com/dsw0423/cache/pb/cachepb"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
+	"github.com/shimingyah/pool"
 )
 
 type GrpcPool struct {
@@ -67,23 +66,32 @@ func (g *GrpcPool) PickPeer(key string) (PeerGetter, bool) {
 
 	if peer := g.peers.Get(key); peer != "" && peer != g.self {
 		g.Log("Pick Peer %s", peer)
-		return g.grpcGetters[peer], true
+		getter := g.grpcGetters[peer]
+		if getter.connPool == nil {
+			p, err := pool.New(peer, pool.DefaultOptions)
+			if err != nil {
+				return nil, false
+			}
+			getter.connPool = p
+		}
+		return getter, true
 	}
 	return nil, false
 }
 
 type grpcGetter struct {
-	addr string
+	addr     string
+	connPool pool.Pool
 }
 
 func (g *grpcGetter) Get(group, key string) ([]byte, error) {
-	conn, err := grpc.NewClient(g.addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := g.connPool.Get()
 	if err != nil {
 		return nil, err
 	}
 	defer conn.Close()
 
-	client := pb.NewCacheClient(conn)
+	client := pb.NewCacheClient(conn.Value())
 	resp, err := client.Get(context.Background(), &pb.CacheRequest{Group: group, Key: key})
 	if err != nil {
 		return nil, err

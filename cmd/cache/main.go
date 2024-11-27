@@ -9,7 +9,9 @@ import (
 
 	"github.com/dsw0423/cache"
 	pb "github.com/dsw0423/cache/pb/cachepb"
+	"github.com/shimingyah/pool"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/keepalive"
 )
 
 var (
@@ -49,7 +51,19 @@ func startCacheServerGrpc(addr string, addrs []string, g *cache.Group) {
 	peers.SetPeers(addrs...)
 	g.RegisterPeers(peers)
 	log.Println("gRPC cache server is running at", addr)
-	grpcServer := grpc.NewServer()
+	grpcServer := grpc.NewServer(
+		grpc.InitialWindowSize(pool.InitialWindowSize),
+		grpc.InitialConnWindowSize(pool.InitialConnWindowSize),
+		grpc.MaxSendMsgSize(pool.MaxSendMsgSize),
+		grpc.MaxRecvMsgSize(pool.MaxRecvMsgSize),
+		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
+			PermitWithoutStream: true,
+		}),
+		grpc.KeepaliveParams(keepalive.ServerParameters{
+			Time:    pool.KeepAliveTime,
+			Timeout: pool.KeepAliveTimeout,
+		}),
+	)
 	pb.RegisterCacheServer(grpcServer, peers)
 	log.Fatal(grpcServer.Serve(lis))
 }

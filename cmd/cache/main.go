@@ -90,12 +90,13 @@ func main() {
 	var port int
 	var isApiServer bool
 	var grpc bool
+	var apiAddr string
 	flag.IntVar(&port, "port", 8001, "cache server port")
 	flag.BoolVar(&isApiServer, "api", false, "is api server?")
 	flag.BoolVar(&grpc, "grpc", true, "enable grpc communication?")
+	flag.StringVar(&apiAddr, "apiaddr", "localhost:9999", "api server address")
 	flag.Parse()
 
-	apiAddr := `http://localhost:9999`
 	addrMap := map[int]string{
 		8001: `http://localhost:8001`,
 		8002: `http://localhost:8002`,
@@ -110,7 +111,7 @@ func main() {
 
 	g := createGroup()
 	if isApiServer {
-		go startApiServer(apiAddr, g)
+		go startApiServer(`http://`+apiAddr, g)
 	}
 
 	if grpc {

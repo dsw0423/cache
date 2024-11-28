@@ -68,6 +68,7 @@ func (g *GrpcPool) PickPeer(key string) (PeerGetter, bool) {
 		g.Log("Pick Peer %s", peer)
 		getter := g.grpcGetters[peer]
 		if getter.connPool == nil {
+			pool.DefaultOptions.Dial = pool.DialTest
 			p, err := pool.New(peer, pool.DefaultOptions)
 			if err != nil {
 				return nil, false

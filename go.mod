@@ -14,3 +14,5 @@ require (
 	golang.org/x/text v0.20.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20241118233622-e639e219e697 // indirect
 )
+
+replace github.com/shimingyah/pool => github.com/dsw0423/pool v1.0.0
